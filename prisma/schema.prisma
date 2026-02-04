@@ -1,0 +1,418 @@
+// NomadShift Platform - Database Schema
+// Prisma ORM Schema for PostgreSQL 14+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// 1. IDENTITY & ACCESS CONTEXT
+// ========================================
+
+/// User table - Authentication and authorization
+model User {
+  id            Int       @id @default(autoincrement())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  role          UserRole  @default(WORKER)
+  emailVerified Boolean   @default(false) @map("email_verified")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  workerProfile         WorkerProfile?
+  businessProfile       BusinessProfile?
+  applications          Application[]
+  reviewsAsReviewer     Review[]        @relation("Reviewer")
+  reviewsAsReviewee     Review[]        @relation("Reviewee")
+  threadParticipants    ThreadParticipant[]
+  messages              Message[]
+  notificationPreferences NotificationPreference?
+  legalAcceptances      LegalAcceptance[]
+  auditLogs             AuditLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  WORKER
+  BUSINESS
+  ADMIN
+}
+
+// ========================================
+// 2. PROFILE MANAGEMENT CONTEXT
+// ========================================
+
+/// Worker profile - Seasonal worker information
+model WorkerProfile {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique @map("user_id")
+  firstName    String?  @map("first_name")
+  lastName     String?  @map("last_name")
+  dateOfBirth   DateTime? @map("date_of_birth")
+  nationality  String?
+  languages    Json?    // CEFR levels: [{language: "en", level: "C1"}]
+  skills       Json?    // Array of skill strings
+  bio          String?  @db.Text
+  locationCity String?  @map("location_city")
+  locationCountry String? @map("location_country")
+  latitude     Float?
+  longitude    Float?
+  profilePhoto String?  @map("profile_photo") // S3 key
+  prestigeLevel PrestigeLevel @default(BRONZE) @map("prestige_level")
+  averageRating Float? @default(0) @map("average_rating")
+  totalReviews Int @default(0) @map("total_reviews")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications    Application[]
+  messages        Message[]
+
+  @@index([latitude, longitude], type: Gin)
+  @@map("worker_profiles")
+}
+
+/// Business profile - Tourism business information
+model BusinessProfile {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @unique @map("user_id")
+  businessName    String   @map("business_name")
+  businessType    BusinessType @map("business_type")
+  description     String?  @db.Text
+  address         String?
+  city            String?
+  country         String?
+  latitude        Float?
+  longitude       Float?
+  website         String?
+  phone           String?
+  photos          Json?    // Array of S3 keys
+  prestigeLevel   PrestigeLevel @default(BRONZE) @map("prestige_level")
+  averageRating   Float? @default(0) @map("average_rating")
+  totalReviews    Int @default(0) @map("total_reviews")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobPostings JobPosting[]
+  messages   Message[]
+
+  @@index([latitude, longitude], type: Gin)
+  @@map("business_profiles")
+}
+
+enum BusinessType {
+  HOSTEL
+  HOTEL
+  RESTAURANT
+  BAR
+  CAFE
+  ACTIVITY_PROVIDER
+  TOUR_OPERATOR
+  OTHER
+}
+
+enum PrestigeLevel {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+// ========================================
+// 3. JOB MARKETPLACE CONTEXT
+// ========================================
+
+/// Job posting - Temporary job listings
+model JobPosting {
+  id               Int       @id @default(autoincrement())
+  businessId       Int       @map("business_id")
+  title            String
+  description      String    @db.Text
+  requirements     String?   @db.Text
+  category         JobCategory
+  workType         WorkType  @map("work_type")
+  startDate        DateTime  @map("start_date")
+  endDate          DateTime  @map("end_date")
+  compensationMin   Int?      @map("compensation_min") // EUR per week
+  compensationMax   Int?      @map("compensation_max") // EUR per week
+  accommodationIncluded Boolean @default(false) @map("accommodation_included")
+  mealsIncluded    Boolean   @default(false) @map("meals_included")
+  requiredLanguages Json?     @map("required_languages") // [{language: "en", level: "B2"}]
+  skills           Json?     // Array of required skills
+  status           JobStatus @default(DRAFT)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  businessProfile BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  applications    Application[]
+
+  @@index([status])
+  @@index([startDate, endDate])
+  @@index([businessId])
+  @@map("job_postings")
+}
+
+enum JobCategory {
+  HOSPITALITY
+  FOOD_SERVICE
+  TOUR_GUIDE
+  ACTIVITIES_INSTRUCTOR
+  CLEANING
+  MAINTENANCE
+  ADMINISTRATION
+  MARKETING
+  OTHER
+}
+
+enum WorkType {
+  FULL_TIME
+  PART_TIME
+  SEASONAL
+  TEMPORARY
+  VOLUNTEER
+}
+
+enum JobStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  FILLED
+  CANCELLED
+}
+
+/// Application - Job applications
+model Application {
+  id          Int             @id @default(autoincrement())
+  jobId       Int             @map("job_id")
+  workerId    Int             @map("worker_id")
+  status      ApplicationStatus @default(PENDING)
+  coverLetter String?         @db.Text @map("cover_letter")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  jobPosting   JobPosting   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  workerProfile WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workAgreement WorkAgreement?
+
+  @@unique([jobId, workerId])
+  @@index([status])
+  @@index([workerId])
+  @@map("applications")
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// Work agreement - Confirmed work arrangements
+model WorkAgreement {
+  id             Int       @id @default(autoincrement())
+  applicationId  Int       @unique @map("application_id")
+  startDate      DateTime  @map("start_date")
+  endDate        DateTime  @map("end_date")
+  compensation   Int       // EUR total
+  accommodation  String?   @db.Text
+  meals          String?   @db.Text
+  workHours      String?   @map("work_hours") // e.g., "40h/week"
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviews     Review[]
+
+  @@map("work_agreements")
+}
+
+// ========================================
+// 4. MESSAGING CONTEXT
+// ========================================
+
+/// Message thread - Conversation between users
+model MessageThread {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  participants ThreadParticipant[]
+  messages     Message[]
+
+  @@map("message_threads")
+}
+
+/// Thread participant - Users in a conversation
+model ThreadParticipant {
+  id      Int           @id @default(autoincrement())
+  threadId Int          @map("thread_id")
+  userId  Int           @map("user_id")
+  lastReadAt DateTime?  @map("last_read_at")
+
+  // Relations
+  thread MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@map("thread_participants")
+}
+
+/// Message - Individual messages
+model Message {
+  id        Int      @id @default(autoincrement())
+  threadId  Int      @map("thread_id")
+  senderId  Int      @map("sender_id")
+  content   String   @db.Text
+  imageUrl  String?  @map("image_url") // S3 key
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  thread        MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderProfile WorkerProfile @relation(fields: [senderId], references: [id])
+
+  @@index([threadId])
+  @@index([senderId])
+  @@map("messages")
+}
+
+// ========================================
+// 5. REPUTATION CONTEXT
+// ========================================
+
+/// Review - Bilateral reviews
+model Review {
+  id              Int       @id @default(autoincrement())
+  workAgreementId Int       @unique @map("work_agreement_id")
+  reviewerId      Int       @map("reviewer_id")
+  revieweeId      Int       @map("reviewee_id")
+  overallRating   Int       @map("overall_rating")
+  communication   Int?      @default(0)
+  punctuality     Int?      @default(0)
+  qualityOfWork   Int?      @map("quality_of_work") @default(0)
+  cleanliness     Int?      @default(0)
+  comment         String?   @db.Text
+  visible         Boolean   @default(false) // Hidden until both parties review
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  workAgreement WorkAgreement @relation(fields: [workAgreementId], references: [id])
+  reviewer      User           @relation("Reviewer", fields: [reviewerId], references: [id])
+  reviewee      User           @relation("Reviewee", fields: [revieweeId], references: [id])
+
+  @@index([revieweeId])
+  @@map("reviews")
+}
+
+// ========================================
+// 6. NOTIFICATION CONTEXT
+// ========================================
+
+/// Notification preferences - User notification settings
+model NotificationPreference {
+  id          Int  @id @default(autoincrement())
+  userId      Int  @unique @map("user_id")
+
+  // Push notification settings
+  pushApplications     Boolean @default(true) @map("push_applications")
+  pushMessages         Boolean @default(true) @map("push_messages")
+  pushReviews          Boolean @default(true) @map("push_reviews")
+  pushWorkAgreements   Boolean @default(true) @map("push_work_agreements")
+  quietHoursStart      String? @map("quiet_hours_start") // "22:00"
+  quietHoursEnd        String? @map("quiet_hours_end")   // "07:00"
+
+  // Email notification settings
+  emailApplications    Boolean @default(true) @map("email_applications")
+  emailMessages        Boolean @default(true) @map("email_messages")
+  emailReviews         Boolean @default(true) @map("email_reviews")
+  emailWeeklyDigest    Boolean @default(true) @map("email_weekly_digest")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// ========================================
+// 7. COMPLIANCE CONTEXT
+// ========================================
+
+/// Legal agreement - Terms of service, privacy policy, etc.
+model LegalAgreement {
+  id          Int      @id @default(autoincrement())
+  title       String
+  type        AgreementType
+  version     String
+  content     String   @db.Text
+  active      Boolean  @default(true)
+  effectiveAt DateTime @map("effective_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  acceptances LegalAcceptance[]
+
+  @@index([type])
+  @@map("legal_agreements")
+}
+
+enum AgreementType {
+  TERMS_OF_SERVICE
+  PRIVACY_POLICY
+  LIABILITY_WAIVER
+  CANCELLATION_POLICY
+  DATA_PROCESSING
+}
+
+/// Legal acceptance - User agreement acceptance records
+model LegalAcceptance {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  agreementId Int      @map("agreement_id")
+  ipAddress   String?  @map("ip_address")
+  acceptedAt  DateTime @default(now()) @map("accepted_at")
+
+  // Relations
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agreement LegalAgreement @relation(fields: [agreementId], references: [id])
+
+  @@unique([userId, agreementId])
+  @@index([userId])
+  @@map("legal_acceptances")
+}
+
+/// Audit log - Immutable audit trail (7-year retention)
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  action    String   // LOGIN, LOGOUT, PROFILE_UPDATE, etc.
+  details   Json     // Additional context
+  timestamp DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
