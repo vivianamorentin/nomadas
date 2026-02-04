@@ -1,0 +1,40 @@
+# NomadShift Platform - Terraform Variables Example
+# Copy this file to terraform.tfvars and fill in the values
+
+# Environment Configuration
+environment = "dev"  # dev, staging, or production
+aws_region  = "eu-central-1"
+project_name = "nomadas"
+
+# Domain Configuration
+domain_name = "nomadshift.eu"
+enable_dns  = false  # Set to true when you have a registered domain
+
+# Database Configuration
+db_instance_class      = "db.t3.medium"
+db_allocated_storage   = 20
+db_max_allocated_storage = 100
+db_multi_az           = true
+db_read_replica_count = 1
+db_password           = "CHANGE_ME_SECURE_PASSWORD"  # Use AWS Secrets Manager in production
+
+# Redis Configuration
+redis_node_type       = "cache.t3.medium"
+redis_num_cache_nodes = 1
+redis_auth_token      = "CHANGE_ME_SECURE_REDIS_TOKEN"  # Production only
+
+# ECS Configuration
+ecs_instance_type  = "t3.medium"
+ecs_min_instances  = 2
+ecs_max_instances  = 20
+
+# Application Configuration
+app_container_port   = 3000
+app_health_check_path = "/health"
+
+# AWS Credentials for S3 Presigned URLs
+s3_access_key_id     = "CHANGE_ME_AWS_ACCESS_KEY"
+s3_secret_access_key = "CHANGE_ME_AWS_SECRET_KEY"
+
+# Alert Configuration
+alert_email = "alerts@nomadshift.eu"
