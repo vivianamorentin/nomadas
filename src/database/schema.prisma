@@ -1,0 +1,121 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model with authentication fields
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  passwordHash String  // Password hashed with bcrypt
+  firstName   String?
+  lastName    String?
+  avatar      String?
+  preferredLanguage String @default("en") // en, es
+
+  // Verification fields
+  verifiedAt     DateTime?
+  verificationToken String? // UUID for email verification
+  verificationTokenExpiresAt DateTime?
+
+  // OAuth fields
+  oauthProvider String? // google, apple
+  oauthId       String? // Provider-specific user ID
+
+  // Role management
+  primaryRole   UserRole @default(NOMAD_WORKER)
+  isActive      Boolean  @default(true)
+
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  userRoles     UserRoleRelation[]
+  sessions      Session[]
+  passwordResetTokens PasswordResetToken[]
+  tosAcceptance TosAcceptance?
+
+  @@map("users")
+}
+
+// User roles supporting multiple role system
+enum UserRole {
+  BUSINESS_OWNER
+  NOMAD_WORKER
+}
+
+// Junction table for many-to-many relationship between users and roles
+model UserRoleRelation {
+  id     String @id @default(cuid())
+  userId String
+  role   UserRole
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
+
+// Session management for JWT tokens
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// Password reset tokens
+model PasswordResetToken {
+  id     String   @id @default(cuid())
+  userId String
+  token  String   @unique
+  expiresAt DateTime
+  usedAt DateTime?
+
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+// Terms of Service acceptance tracking
+model TosAcceptance {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  version       String   // Version of ToS accepted
+  acceptedAt    DateTime @default(now())
+  ipAddress     String
+  userAgent     String
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tos_acceptance")
+}
+
+// Email service configuration placeholder for future implementation
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  subject     String
+  htmlContent String
+  textContent String?
+  variables   Json?    // Template variables mapping
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("email_templates")
+}
