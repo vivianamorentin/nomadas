@@ -2,9 +2,54 @@
 
 Connecting seasonal workers with European tourism businesses.
 
+[![CI/CD](https://github.com/nomadshift/nomadas/actions/workflows/ci.yml/badge.svg)](https://github.com/nomadshift/nomadas/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-15%25-yellow)](https://github.com/nomadshift/nomadas)
+[![License](https://img.shields.io/badge/license-UNLICENSED-red)](LICENSE)
+
 ## Overview
 
 NomadShift is a dual-sided marketplace platform that connects temporary workers (travelers, seasonal workers) with businesses in the European tourism industry (hostels, hotels, restaurants, activity providers).
+
+## Implementation Status
+
+**Current Version:** 1.1.0 (2026-02-04)
+**Project Phase:** IMPLEMENTING
+**Quality Status:** GOOD (85% TRUST score achieved)
+
+### SPEC Completion
+
+| SPEC | Title | Status | Completion |
+|------|-------|--------|------------|
+| SPEC-INFRA-001 | Infrastructure & Non-Functional Requirements | ✅ COMPLETE | 95% |
+| SPEC-AUTH-001 | User Authentication & Onboarding | ✅ COMPLETE | 85% |
+| SPEC-PROF-001 | Profile Management | 📋 Planned | 0% |
+| SPEC-JOBS-001 | Job Marketplace | 📋 Planned | 0% |
+| SPEC-APPS-001 | Application Workflow | 📋 Planned | 0% |
+| SPEC-MESS-001 | Messaging System | 📋 Planned | 0% |
+| SPEC-REVW-001 | Reviews & Ratings | 📋 Planned | 0% |
+| SPEC-NOTF-001 | Notifications | 📋 Planned | 0% |
+
+**Overall:** 2/8 SPECs completed (25%)
+
+### Quality Metrics
+
+| Metric | Current | Target | Status |
+|--------|---------|--------|--------|
+| Test Coverage | 85% (auth module) | 70% | ✅ |
+| Type Safety | Partial | Full | ⚠️ |
+| TRUST 5 Score | 85% (auth module) | 80% | ✅ |
+| LSP Quality Gates | 10/11 passing | 11/11 | ⚠️ |
+| Security (OWASP) | 90% | 80% | ✅ |
+| Architecture (DDD) | 95% | 80% | ✅ |
+
+### Known Issues
+
+- **Type Safety:** TypeScript strict mode disabled, should enable
+- **Rate Limiting:** Auth endpoints need rate limiting implementation (HIGH priority)
+- **Account Lockout:** Not implemented after failed login attempts (MEDIUM priority)
+- **Email Service:** Verification email sending not yet implemented (MEDIUM priority)
+
+**Next Steps:** See [CHANGELOG.md](CHANGELOG.md#110---2026-02-04) for detailed release notes
 
 ## Tech Stack
 
@@ -108,11 +153,15 @@ http://localhost:3000/api/docs
 
 ### Authentication (`/api/v1/auth`)
 
-- `POST /register` - Register new user
+**Implemented (v1.1.0):**
+- `POST /register` - Register new user with email/password
 - `POST /login` - Login with email/password
-- `POST /logout` - Logout current user
+- `POST /logout` - Logout current user (requires JWT)
 - `POST /refresh-token` - Refresh access token
-- `GET /me` - Get current user profile
+- `GET /me` - Get current user profile (requires JWT)
+- `POST /verify-email` - Verify user email address
+
+**Documentation:** See [docs/API_AUTHENTICATION.md](docs/API_AUTHENTICATION.md) for complete API documentation.
 
 ### Profiles (`/api/v1/profiles`)
 
@@ -254,6 +303,28 @@ Key variables:
 3. Write/update tests
 4. Ensure >70% code coverage
 5. Submit a pull request
+
+## Project Documentation
+
+### Internal Documentation
+
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
+- **[.moai/project/structure.md](.moai/project/structure.md)** - Project structure and bounded contexts
+- **[.moai/project/tech.md](.moai/project/tech.md)** - Technology stack and dependencies
+- **[.moai/reports/SPEC-INFRA-001/SYNC_SUMMARY.md](.moai/reports/SPEC-INFRA-001/SYNC_SUMMARY.md)** - Implementation summary
+
+### SPEC Documents
+
+- **[.moai/specs/SPEC-INFRA-001/spec.md](.moai/specs/SPEC-INFRA-001/spec.md)** - Infrastructure specification
+- **[.moai/reports/SPEC-INFRA-001/QUALITY_VALIDATION_REPORT.md](.moai/reports/SPEC-INFRA-001/QUALITY_VALIDATION_REPORT.md)** - Quality validation report
+
+### API Documentation
+
+When running in development mode, Swagger documentation is available at:
+
+```
+http://localhost:3000/api/docs
+```
 
 ## License
 

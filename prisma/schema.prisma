@@ -26,7 +26,7 @@ model User {
 
   // Relations
   workerProfile         WorkerProfile?
-  businessProfile       BusinessProfile?
+  businessProfiles      BusinessProfile[]
   applications          Application[]
   reviewsAsReviewer     Review[]        @relation("Reviewer")
   reviewsAsReviewee     Review[]        @relation("Reviewee")
@@ -83,42 +83,74 @@ model WorkerProfile {
 /// Business profile - Tourism business information
 model BusinessProfile {
   id              Int      @id @default(autoincrement())
-  userId          Int      @unique @map("user_id")
-  businessName    String   @map("business_name")
+  userId          Int      @map("user_id")
+
+  // Business Information
+  businessName    String   @map("business_name") @db.VarChar(100)
   businessType    BusinessType @map("business_type")
-  description     String?  @db.Text
-  address         String?
-  city            String?
-  country         String?
-  latitude        Float?
-  longitude       Float?
-  website         String?
-  phone           String?
-  photos          Json?    // Array of S3 keys
-  prestigeLevel   PrestigeLevel @default(BRONZE) @map("prestige_level")
-  averageRating   Float? @default(0) @map("average_rating")
-  totalReviews    Int @default(0) @map("total_reviews")
+  businessTypeCustom String? @map("business_type_custom") @db.VarChar(100)
+  description     String   @db.Text
+
+  // Location
+  locationAddress String   @map("location_address") @db.VarChar(255)
+  locationCity    String   @map("location_city") @db.VarChar(100)
+  locationCountry String   @map("location_country") @db.VarChar(100)
+  locationPostalCode String? @map("location_postal_code") @db.VarChar(20)
+  locationLatitude Float   @map("location_latitude")
+  locationLongitude Float  @map("location_longitude")
+
+  // Contact
+  contactEmail    String   @map("contact_email") @db.VarChar(255)
+  contactPhone    String   @map("contact_phone") @db.VarChar(50)
+  websiteUrl      String?  @map("website_url") @db.VarChar(255)
+
+  // Status
+  status          BusinessStatus @default(ACTIVE)
+  isVerified      Boolean  @default(false) @map("is_verified")
+  isPrimary       Boolean  @default(false) @map("is_primary")
+
+  // Reputation
+  prestigeLevel    PrestigeLevel @default(BRONZE) @map("prestige_level")
+  averageRating   Float    @default(0) @map("average_rating") @db.Decimal(3, 2)
+  totalReviews    Int      @default(0) @map("total_reviews")
+  hasGoodEmployerBadge Boolean @default(false) @map("has_good_employer_badge")
+
+  // Timestamps
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   // Relations
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  jobPostings JobPosting[]
-  messages   Message[]
+  user                User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobPostings         JobPosting[]
+  messages            Message[]
+  photos              BusinessPhoto[]
+  verificationDocuments BusinessVerificationDocument[]
+  changeHistory       BusinessProfileChange[]
 
-  @@index([latitude, longitude], type: Gin)
+  @@index([locationLatitude, locationLongitude])
+  @@index([userId])
+  @@index([status])
+  @@index([businessType])
+  @@index([averageRating, totalReviews])
   @@map("business_profiles")
 }
 
 enum BusinessType {
-  HOSTEL
-  HOTEL
   RESTAURANT
   BAR
   CAFE
-  ACTIVITY_PROVIDER
+  BOUTIQUE
+  HOSTEL
+  HOTEL
   TOUR_OPERATOR
+  RETAIL
   OTHER
+}
+
+enum BusinessStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }
 
 enum PrestigeLevel {
@@ -126,6 +158,95 @@ enum PrestigeLevel {
   SILVER
   GOLD
   PLATINUM
+}
+
+// ========================================
+// BUSINESS PROFILE EXTENSIONS
+// ========================================
+
+/// Business photo - Managed photo gallery
+model BusinessPhoto {
+  id                Int      @id @default(autoincrement())
+  businessProfileId Int      @map("business_profile_id")
+
+  fileName          String   @map("file_name") @db.VarChar(255)
+  fileUrl           String   @map("file_url") @db.VarChar(500)
+  thumbnailUrl      String   @map("thumbnail_url") @db.VarChar(500)
+
+  fileSizeBytes     Int      @map("file_size_bytes")
+  width             Int
+  height            Int
+
+  uploadOrder       Int      @default(0) @map("upload_order")
+  isPrimary         Boolean  @default(false) @map("is_primary")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([businessProfileId, isPrimary], name: "unique_primary_photo")
+  @@index([businessProfileId])
+  @@index([uploadOrder])
+  @@map("business_photos")
+}
+
+/// Business verification document - Document upload for verification
+model BusinessVerificationDocument {
+  id                Int      @id @default(autoincrement())
+  businessProfileId Int      @map("business_profile_id")
+
+  documentType      VerificationDocumentType @map("document_type")
+  fileUrl           String   @map("file_url") @db.VarChar(500)
+  fileName          String   @map("file_name") @db.VarChar(255)
+
+  uploadDate        DateTime @default(now()) @map("upload_date")
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+
+  reviewedBy        Int?     @map("reviewed_by")
+  reviewDate        DateTime? @map("review_date")
+  rejectionReason   String?  @db.Text @map("rejection_reason")
+
+  // Relations
+  businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@index([businessProfileId])
+  @@index([verificationStatus])
+  @@map("business_verification_documents")
+}
+
+enum VerificationDocumentType {
+  BUSINESS_LICENSE
+  TAX_REGISTRATION
+  CHAMBER_COMMERCE
+  HOSPITALITY_LICENSE
+  OTHER
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Business profile change - Audit log for profile changes
+model BusinessProfileChange {
+  id                Int      @id @default(autoincrement())
+  businessProfileId Int      @map("business_profile_id")
+
+  changedField      String   @map("changed_field") @db.VarChar(100)
+  oldValue          String?  @db.Text @map("old_value")
+  newValue          String?  @db.Text @map("new_value")
+
+  changedAt         DateTime @default(now()) @map("changed_at")
+  changedBy         Int      @map("changed_by")
+
+  // Relations
+  businessProfile   BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@index([businessProfileId])
+  @@index([changedAt])
+  @@map("business_profile_changes")
 }
 
 // ========================================
