@@ -75,6 +75,8 @@ model WorkerProfile {
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   applications    Application[]
   messages        Message[]
+  savedJobs       SavedJob[]
+  savedSearches   SavedSearch[]
 
   @@index([latitude, longitude], type: Gin)
   @@map("worker_profiles")
@@ -259,7 +261,7 @@ model BusinessProfileChange {
 // 3. JOB MARKETPLACE CONTEXT
 // ========================================
 
-/// Job posting - Temporary job listings
+/// Job posting - Temporary job listings (SPEC-JOB-001)
 model JobPosting {
   id               Int       @id @default(autoincrement())
   businessId       Int       @map("business_id")
@@ -268,26 +270,165 @@ model JobPosting {
   requirements     String?   @db.Text
   category         JobCategory
   workType         WorkType  @map("work_type")
+
+  // Duration (SPEC-JOB-001)
+  durationAmount   Int?      @map("duration_amount")
+  durationUnit     DurationUnit? @map("duration_unit") // DAYS, WEEKS, MONTHS
+
+  // Dates
   startDate        DateTime  @map("start_date")
   endDate          DateTime  @map("end_date")
-  compensationMin   Int?      @map("compensation_min") // EUR per week
-  compensationMax   Int?      @map("compensation_max") // EUR per week
+
+  // Compensation (SPEC-JOB-001)
+  compensationType CompensationType? @map("compensation_type") // HOURLY, DAILY, FIXED, WEEKLY
+  compensationMin   Int?      @map("compensation_min")
+  compensationMax   Int?      @map("compensation_max")
+  compensationCurrency String? @map("compensation_currency") @db.VarChar(3) // ISO 4217
+
+  // Benefits
   accommodationIncluded Boolean @default(false) @map("accommodation_included")
   mealsIncluded    Boolean   @default(false) @map("meals_included")
+
+  // Requirements
   requiredLanguages Json?     @map("required_languages") // [{language: "en", level: "B2"}]
   skills           Json?     // Array of required skills
+  requiredExperience RequiredExperience? @map("required_experience") // NONE, BASIC, INTERMEDIATE, ADVANCED
+
+  // Status and analytics (SPEC-JOB-001)
   status           JobStatus @default(DRAFT)
+  applicantCount   Int       @default(0) @map("applicant_count")
+  viewCount        Int       @default(0) @map("view_count")
+  closedAt         DateTime? @map("closed_at")
+
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   // Relations
   businessProfile BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
   applications    Application[]
+  locations       JobLocation[]
+  savedJobs       SavedJob[]
+  views           JobView[]
 
   @@index([status])
   @@index([startDate, endDate])
   @@index([businessId])
+  @@index([compensationMin, compensationMax])
   @@map("job_postings")
+}
+
+enum DurationUnit {
+  DAYS
+  WEEKS
+  MONTHS
+}
+
+enum CompensationType {
+  HOURLY
+  DAILY
+  WEEKLY
+  FIXED
+}
+
+enum RequiredExperience {
+  NONE
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+}
+
+/// Job location - Multiple locations per job (SPEC-JOB-001)
+model JobLocation {
+  id          Int      @id @default(autoincrement())
+  jobPostingId Int     @map("job_posting_id")
+
+  locationName String?  @map("location_name") @db.VarChar(255) // Optional location identifier
+  address      String   @db.VarChar(255)
+  city         String   @db.VarChar(100)
+  country      String   @db.VarChar(100)
+  postalCode   String?  @map("postal_code") @db.VarChar(20)
+  latitude     Float
+  longitude    Float
+
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  jobPosting   JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+
+  @@index([jobPostingId])
+  @@index([latitude, longitude])
+  @@map("job_locations")
+}
+
+/// Saved job - Worker bookmarked jobs (SPEC-JOB-001)
+model SavedJob {
+  id          Int      @id @default(autoincrement())
+  workerId    Int      @map("worker_id")
+  jobPostingId Int     @map("job_posting_id")
+
+  notes       String?  @db.Text // Worker's private notes
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  workerProfile WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  jobPosting   JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+
+  @@unique([workerId, jobPostingId])
+  @@index([workerId])
+  @@index([jobPostingId])
+  @@map("saved_jobs")
+}
+
+/// Saved search - Worker search alerts (SPEC-JOB-001)
+model SavedSearch {
+  id          Int      @id @default(autoincrement())
+  workerId    Int      @map("worker_id")
+
+  name        String   @db.VarChar(100) // User-defined search name
+  searchFilters Json   @map("search_filters") // Serialized search criteria
+
+  notificationEnabled Boolean @default(true) @map("notification_enabled")
+  lastUsedAt  DateTime? @map("last_used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  workerProfile WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@map("saved_searches")
+}
+
+/// Job view - Analytics tracking (SPEC-JOB-001)
+model JobView {
+  id          Int      @id @default(autoincrement())
+  jobPostingId Int     @map("job_posting_id")
+
+  viewerType  ViewerType @default(GUEST) @map("viewer_type") // GUEST, WORKER, BUSINESS
+  viewerId    Int?     @map("viewer_id") // User ID if logged in
+  viewSource  ViewSource @map("view_source") // SEARCH, MAP, RECOMMENDATION, DIRECT
+
+  viewedAt    DateTime @default(now()) @map("viewed_at")
+
+  // Relations
+  jobPosting   JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+
+  @@index([jobPostingId])
+  @@index([viewedAt])
+  @@index([viewerType, viewerId])
+  @@map("job_views")
+}
+
+enum ViewerType {
+  GUEST
+  WORKER
+  BUSINESS
+}
+
+enum ViewSource {
+  SEARCH
+  MAP
+  RECOMMENDATION
+  DIRECT
 }
 
 enum JobCategory {
