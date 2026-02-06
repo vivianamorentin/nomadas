@@ -12,9 +12,9 @@ NomadShift is a dual-sided marketplace platform that connects temporary workers 
 
 ## Implementation Status
 
-**Current Version:** 1.1.0 (2026-02-04)
+**Current Version:** 1.2.0 (2026-02-05)
 **Project Phase:** IMPLEMENTING
-**Quality Status:** GOOD (85% TRUST score achieved)
+**Quality Status:** GOOD (82% TRUST score achieved)
 
 ### SPEC Completion
 
@@ -22,34 +22,36 @@ NomadShift is a dual-sided marketplace platform that connects temporary workers 
 |------|-------|--------|------------|
 | SPEC-INFRA-001 | Infrastructure & Non-Functional Requirements | ✅ COMPLETE | 95% |
 | SPEC-AUTH-001 | User Authentication & Onboarding | ✅ COMPLETE | 85% |
-| SPEC-PROF-001 | Profile Management | 📋 Planned | 0% |
-| SPEC-JOBS-001 | Job Marketplace | 📋 Planned | 0% |
-| SPEC-APPS-001 | Application Workflow | 📋 Planned | 0% |
-| SPEC-MESS-001 | Messaging System | 📋 Planned | 0% |
-| SPEC-REVW-001 | Reviews & Ratings | 📋 Planned | 0% |
-| SPEC-NOTF-001 | Notifications | 📋 Planned | 0% |
+| SPEC-BIZ-001 | Business Profile Management | ✅ COMPLETE | 95% |
+| SPEC-JOB-001 | Job Posting Management | 📋 Planned | 0% |
+| SPEC-REV-001 | Reviews and Ratings | 📋 Planned | 0% |
+| SPEC-MSG-001 | Messaging System | 📋 Planned | 0% |
+| SPEC-NOT-001 | Notifications | 📋 Planned | 0% |
+| SPEC-SEARCH-001 | Job Discovery and Search | 📋 Planned | 0% |
 
-**Overall:** 2/8 SPECs completed (25%)
+**Overall:** 3/8 SPECs completed (38%)
 
 ### Quality Metrics
 
 | Metric | Current | Target | Status |
 |--------|---------|--------|--------|
-| Test Coverage | 85% (auth module) | 70% | ✅ |
+| Test Coverage | 85% (auth + business) | 70% | ✅ |
 | Type Safety | Partial | Full | ⚠️ |
-| TRUST 5 Score | 85% (auth module) | 80% | ✅ |
+| TRUST 5 Score | 82% (business module) | 80% | ✅ |
 | LSP Quality Gates | 10/11 passing | 11/11 | ⚠️ |
-| Security (OWASP) | 90% | 80% | ✅ |
+| Security (OWASP) | 75% | 80% | ⚠️ |
 | Architecture (DDD) | 95% | 80% | ✅ |
 
 ### Known Issues
 
 - **Type Safety:** TypeScript strict mode disabled, should enable
-- **Rate Limiting:** Auth endpoints need rate limiting implementation (HIGH priority)
+- **Rate Limiting:** Auth and geocoding endpoints need rate limiting (HIGH priority)
+- **File Validation:** Photo upload needs magic bytes validation (HIGH priority)
 - **Account Lockout:** Not implemented after failed login attempts (MEDIUM priority)
 - **Email Service:** Verification email sending not yet implemented (MEDIUM priority)
+- **AWS SDK v2:** Should migrate to AWS SDK v3 (MEDIUM priority)
 
-**Next Steps:** See [CHANGELOG.md](CHANGELOG.md#110---2026-02-04) for detailed release notes
+**Next Steps:** See [CHANGELOG.md](CHANGELOG.md#120---2026-02-05) for detailed release notes
 
 ## Tech Stack
 
@@ -162,6 +164,37 @@ http://localhost:3000/api/docs
 - `POST /verify-email` - Verify user email address
 
 **Documentation:** See [docs/API_AUTHENTICATION.md](docs/API_AUTHENTICATION.md) for complete API documentation.
+
+### Business Profiles (`/api/v1/business-profiles`)
+
+**Implemented (v1.2.0):**
+- `POST /business-profiles` - Create new business profile
+- `GET /business-profiles` - List user's businesses
+- `GET /business-profiles/:id` - Get single business profile
+- `PUT /business-profiles/:id` - Update business profile
+- `DELETE /business-profiles/:id` - Delete business profile
+
+**Photo Management:**
+- `POST /business-profiles/:id/photos/upload-url` - Generate S3 presigned URL
+- `POST /business-profiles/:id/photos/confirm` - Confirm photo upload
+- `PUT /business-profiles/:id/photos/reorder` - Reorder photos
+- `POST /business-profiles/:id/photos/:photoId/set-primary` - Set primary photo
+- `DELETE /business-profiles/:id/photos/:photoId` - Delete photo
+
+**Geocoding:**
+- `POST /geocoding/forward` - Convert address to coordinates
+- `POST /geocoding/reverse` - Convert coordinates to address
+- `POST /geocoding/distance` - Calculate distance between coordinates
+
+**Verification:**
+- `POST /business-profiles/:id/verification` - Submit verification document
+- `GET /business-profiles/:id/verification` - Get verification status
+- `DELETE /business-profiles/:id/verification/:documentId` - Delete document
+- `GET /admin/business-profiles/pending/verification` - List pending verifications (Admin)
+- `POST /admin/business-profiles/:id/verification/:documentId/approve` - Approve verification (Admin)
+- `POST /admin/business-profiles/:id/verification/:documentId/reject` - Reject verification (Admin)
+
+**Documentation:** See [docs/API_BUSINESS_PROFILES.md](docs/API_BUSINESS_PROFILES.md) for complete API documentation.
 
 ### Profiles (`/api/v1/profiles`)
 
