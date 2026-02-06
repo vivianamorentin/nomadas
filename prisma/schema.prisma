@@ -115,6 +115,11 @@ model BusinessProfile {
   totalReviews    Int      @default(0) @map("total_reviews")
   hasGoodEmployerBadge Boolean @default(false) @map("has_good_employer_badge")
 
+  // Badge metadata (SPEC-REV-001)
+  goodEmployerBadgeAwardedAt DateTime? @map("good_employer_badge_awarded_at")
+  goodEmployerBadgeRevokedAt DateTime? @map("good_employer_badge_revoked_at")
+  goodEmployerBadgeCriteria Json?    @map("good_employer_badge_criteria") // {rating: 4.7, reviews: 15}
+
   // Timestamps
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -132,6 +137,7 @@ model BusinessProfile {
   @@index([status])
   @@index([businessType])
   @@index([averageRating, totalReviews])
+  @@index([hasGoodEmployerBadge])
   @@map("business_profiles")
 }
 
@@ -417,7 +423,7 @@ model Message {
 // 5. REPUTATION CONTEXT
 // ========================================
 
-/// Review - Bilateral reviews
+/// Review - Bilateral reviews with publication workflow
 model Review {
   id              Int       @id @default(autoincrement())
   workAgreementId Int       @unique @map("work_agreement_id")
@@ -429,7 +435,27 @@ model Review {
   qualityOfWork   Int?      @map("quality_of_work") @default(0)
   cleanliness     Int?      @default(0)
   comment         String?   @db.Text
-  visible         Boolean   @default(false) // Hidden until both parties review
+
+  // Publication workflow (SPEC-REV-001)
+  status          ReviewStatus @default(PENDING)
+  submittedAt     DateTime  @default(now()) @map("submitted_at")
+  publishedAt     DateTime? @map("published_at")
+
+  // Response to review (SPEC-REV-001)
+  response        String?   @db.Text
+  responseSubmittedAt DateTime? @map("response_submitted_at")
+
+  // Moderation (SPEC-REV-001)
+  flagCount       Int       @default(0) @map("flag_count")
+  flagReasons     Json?     // [{category: "OFFENSIVE", comment: "..."}]
+  moderationStatus ModerationStatus? @default(null) @map("moderation_status")
+
+  // Audit trail (SPEC-REV-001)
+  auditLog        Json?     @map("audit_log") // All changes tracked
+
+  // Legacy field (deprecated - use status)
+  visible         Boolean   @default(false)
+
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
@@ -439,7 +465,39 @@ model Review {
   reviewee      User           @relation("Reviewee", fields: [revieweeId], references: [id])
 
   @@index([revieweeId])
+  @@index([status])
+  @@index([revieweeId, status])
+  @@index([moderationStatus])
   @@map("reviews")
+}
+
+enum ReviewStatus {
+  PENDING       // Submitted, waiting for counterpart or 14-day deadline
+  PUBLISHED     // Visible to public
+  FLAGGED       // Under moderation review
+  HIDDEN        // Hidden by moderator
+}
+
+enum ModerationStatus {
+  PENDING_REVIEW
+  APPROVED
+  HIDDEN
+  SUSPENDED_USER
+}
+
+/// Prestige level history - Track prestige changes over time (SPEC-REV-001)
+model PrestigeLevelHistory {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @map("user_id")
+  oldLevel         PrestigeLevel?
+  newLevel         PrestigeLevel @map("new_level")
+  completedJobsAtTime Int   @map("completed_jobs_at_time")
+  ratingAtTime     Float    @map("rating_at_time") @db.Decimal(3, 2)
+  changedAt        DateTime @default(now()) @map("changed_at")
+
+  @@index([userId])
+  @@index([changedAt])
+  @@map("prestige_level_history")
 }
 
 // ========================================
