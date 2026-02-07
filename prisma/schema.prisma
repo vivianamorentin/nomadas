@@ -41,6 +41,10 @@ model User {
   conversationsAsUser2  Conversation[]   @relation("ConversationUser2")
   sentMessages          MessageNew[]     @relation("SentMessages")
 
+  // NEW: Application & Agreement relations (SPEC-APP-001)
+  statusChanges         ApplicationStatusHistory[] @relation("StatusChanger")
+  agreementVersions     AgreementVersion[] @relation("AgreementVersionChanger")
+
   @@map("users")
 }
 
@@ -314,6 +318,7 @@ model JobPosting {
   locations       JobLocation[]
   savedJobs       SavedJob[]
   views           JobView[]
+  screeningQuestions ScreeningQuestion[]
 
   @@index([status])
   @@index([startDate, endDate])
@@ -464,21 +469,29 @@ enum JobStatus {
   CANCELLED
 }
 
-/// Application - Job applications
+/// Application - Job applications (ENHANCED for SPEC-APP-001)
 model Application {
   id          Int             @id @default(autoincrement())
   jobId       Int             @map("job_id")
   workerId    Int             @map("worker_id")
   status      ApplicationStatus @default(PENDING)
   coverLetter String?         @db.Text @map("cover_letter")
+
+  // Timestamps
+  withdrawnAt DateTime?       @map("withdrawn_at")
+  rejectedAt  DateTime?       @map("rejected_at")
+  acceptedAt  DateTime?       @map("accepted_at")
+
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
   // Relations
-  jobPosting   JobPosting   @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  workerProfile WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
-  workAgreement WorkAgreement?
-  conversations Conversation[]
+  jobPosting        JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  workerProfile     WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workAgreement     WorkAgreement?
+  conversations     Conversation[]
+  statusHistory     ApplicationStatusHistory[]
+  screeningAnswers  ScreeningAnswer[]
 
   @@unique([jobId, workerId])
   @@index([status])
@@ -487,16 +500,151 @@ model Application {
 }
 
 enum ApplicationStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
-  WITHDRAWN
-  IN_PROGRESS
-  COMPLETED
+  DRAFT        // Job created, no applicants yet
+  PENDING      // Application submitted
+  ACCEPTED     // Business owner accepted
+  NEGOTIATING  // Work agreement being discussed
+  CONFIRMED    // Work agreement signed
+  ACTIVE       // Job in progress (replaces IN_PROGRESS)
+  COMPLETED    // Job finished
+  CANCELLED    // Cancelled by either party
+  WITHDRAWN    // Worker withdrew
+  REJECTED     // Business owner rejected
 }
 
-/// Work agreement - Confirmed work arrangements
+/// Application status history - Audit trail for status changes
+model ApplicationStatusHistory {
+  id            Int      @id @default(autoincrement())
+  applicationId Int      @map("application_id")
+  fromStatus    ApplicationStatus? @map("from_status")
+  toStatus      ApplicationStatus @map("to_status")
+  changedAt     DateTime @default(now()) @map("changed_at")
+  changedBy     Int      @map("changed_by")
+  reason        String?  @db.Text
+
+  // Relations
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changedByUser User @relation("StatusChanger", fields: [changedBy], references: [id])
+
+  @@index([applicationId])
+  @@index([changedAt])
+  @@map("application_status_history")
+}
+
+/// Screening question - Job-specific application questions
+model ScreeningQuestion {
+  id        Int      @id @default(autoincrement())
+  jobId     Int      @map("job_id")
+  question  String   @db.Text
+  type      ScreeningQuestionType
+  options   Json?    // For multiple choice questions
+  required  Boolean  @default(false)
+  order     Int
+  maxLength Int?     @map("max_length")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  jobPosting   JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  answers      ScreeningAnswer[]
+
+  @@index([jobId])
+  @@map("screening_questions")
+}
+
+enum ScreeningQuestionType {
+  TEXT
+  MULTIPLE_CHOICE
+  YES_NO
+}
+
+/// Screening answer - Applicant responses to screening questions
+model ScreeningAnswer {
+  id            Int      @id @default(autoincrement())
+  questionId    Int      @map("question_id")
+  applicationId Int      @map("application_id")
+  answer        Json     // String or array of strings
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  question    ScreeningQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, applicationId])
+  @@index([applicationId])
+  @@map("screening_answers")
+}
+
+/// Work agreement - Confirmed work arrangements (ENHANCED)
 model WorkAgreement {
+  id             Int       @id @default(autoincrement())
+  applicationId  Int       @unique @map("application_id")
+
+  // Job Terms
+  jobTitle       String    @map("job_title")
+  jobDescription String    @db.Text @map("job_description")
+  responsibilities Json     @map("responsibilities")
+
+  // Dates
+  startDate      DateTime  @map("start_date")
+  endDate        DateTime  @map("end_date")
+
+  // Schedule & Compensation
+  expectedSchedule Json     @map("expected_schedule") // {type, hoursPerWeek, ...}
+  agreedCompensation Json   @map("agreed_compensation") // {type, amount, currency}
+
+  // Digital Signatures (NEW)
+  workerConfirmedAt   DateTime? @map("worker_confirmed_at")
+  workerIpAddress     String?   @map("worker_ip_address")
+  workerUserAgent     String?   @db.Text @map("worker_user_agent")
+
+  businessConfirmedAt DateTime? @map("business_confirmed_at")
+  businessIpAddress   String?   @map("business_ip_address")
+  businessUserAgent   String?   @db.Text @map("business_user_agent")
+
+  // Metadata
+  status         AgreementStatus @default(DRAFT)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  confirmedAt    DateTime?       @map("confirmed_at")
+  version        Int             @default(1)
+  documentHash   String?         @map("document_hash") // SHA-256
+  pdfUrl         String?         @map("pdf_url") // S3 URL
+
+  // Relations
+  application    Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  versions       AgreementVersion[]
+  reviews        Review[]
+
+  @@index([applicationId])
+  @@index([status])
+  @@map("work_agreements")
+}
+
+enum AgreementStatus {
+  DRAFT       // Initial proposal
+  PROPOSED    // Sent to other party
+  CONFIRMED   // Both parties confirmed
+  ACTIVE      // Job in progress
+  COMPLETED   // Job finished
+  CANCELLED   // Cancelled
+}
+
+/// Agreement version - Negotiation history tracking
+model AgreementVersion {
+  id          Int      @id @default(autoincrement())
+  agreementId Int      @map("agreement_id")
+  version     Int
+  changes     Json     // Field-level changes tracking
+  changedBy   Int      @map("changed_by")
+  changedAt   DateTime @default(now()) @map("changed_at")
+
+  // Relations
+  agreement WorkAgreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  changedByUser User @relation("AgreementVersionChanger", fields: [changedBy], references: [id])
+
+  @@unique([agreementId, version])
+  @@index([agreementId])
+  @@map("agreement_versions")
+}
   id             Int       @id @default(autoincrement())
   applicationId  Int       @unique @map("application_id")
   startDate      DateTime  @map("start_date")
