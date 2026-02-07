@@ -36,6 +36,11 @@ model User {
   legalAcceptances      LegalAcceptance[]
   auditLogs             AuditLog[]
 
+  // NEW: Messaging relations (SPEC-MSG-001)
+  conversationsAsUser1  Conversation[]   @relation("ConversationUser1")
+  conversationsAsUser2  Conversation[]   @relation("ConversationUser2")
+  sentMessages          MessageNew[]     @relation("SentMessages")
+
   @@map("users")
 }
 
@@ -473,6 +478,7 @@ model Application {
   jobPosting   JobPosting   @relation(fields: [jobId], references: [id], onDelete: Cascade)
   workerProfile WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
   workAgreement WorkAgreement?
+  conversations Conversation[]
 
   @@unique([jobId, workerId])
   @@index([status])
@@ -513,7 +519,8 @@ model WorkAgreement {
 // 4. MESSAGING CONTEXT
 // ========================================
 
-/// Message thread - Conversation between users
+// LEGACY: Message thread system (basic messaging)
+/// Message thread - Conversation between users (legacy system)
 model MessageThread {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now()) @map("created_at")
@@ -526,7 +533,7 @@ model MessageThread {
   @@map("message_threads")
 }
 
-/// Thread participant - Users in a conversation
+/// Thread participant - Users in a conversation (legacy system)
 model ThreadParticipant {
   id      Int           @id @default(autoincrement())
   threadId Int          @map("thread_id")
@@ -541,7 +548,7 @@ model ThreadParticipant {
   @@map("thread_participants")
 }
 
-/// Message - Individual messages
+/// Message - Individual messages (legacy system)
 model Message {
   id        Int      @id @default(autoincrement())
   threadId  Int      @map("thread_id")
@@ -558,6 +565,126 @@ model Message {
   @@index([threadId])
   @@index([senderId])
   @@map("messages")
+}
+
+// ========================================
+// 4.1 ENHANCED MESSAGING SYSTEM (SPEC-MSG-001)
+// ========================================
+
+/// Conversation - Enhanced 1-to-1 conversation with job application context
+model Conversation {
+  id                String              @id @default(cuid())
+  user1Id           Int                 @map("user1_id")
+  user2Id           Int                 @map("user2_id")
+  jobApplicationId  Int?                @map("job_application_id")
+
+  // Status tracking
+  status            ConversationStatus  @default(ACTIVE)
+  lastMessageAt     DateTime?           @map("last_message_at")
+  archivedAt        DateTime?           @map("archived_at")
+  archivedBy        Int?                @map("archived_by")
+
+  // Timestamps
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  user1             User                @relation("ConversationUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2             User                @relation("ConversationUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+  jobApplication    Application?        @relation(fields: [jobApplicationId], references: [id], onDelete: SetNull)
+  messages          MessageNew[]
+
+  // Constraints
+  @@unique([user1Id, user2Id, jobApplicationId])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@index([status])
+  @@index([lastMessageAt(sort: Desc)])
+  @@map("conversations")
+}
+
+/// MessageNew - Enhanced messages with read receipts and status tracking
+model MessageNew {
+  id                String        @id @default(cuid())
+  conversationId    String        @map("conversation_id")
+  senderId          Int           @map("sender_id")
+
+  // Content
+  messageType       MessageType   @default(TEXT)
+  content           String?       @db.Text
+  imageUrl          String?       @map("image_url")
+
+  // Metadata
+  metadata          Json?
+
+  // Read receipts (SPEC-MSG-001)
+  readAt            DateTime?     @map("read_at")
+  deliveredAt       DateTime      @default(now()) @map("delivered_at")
+
+  // Soft delete (archival only per REQ-MSG-008)
+  isArchived        Boolean       @default(false) @map("is_archived")
+  archivedAt        DateTime?     @map("archived_at")
+
+  // Full-text search (Phase 4)
+  searchText        String?       @map("search_text") @db.Text
+
+  // Timestamps
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  conversation      Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender            User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  images            MessageImage[]
+
+  // Indexes
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([senderId])
+  @@index([conversationId, readAt])
+  @@fulltext([searchText])
+  @@map("messages_new")
+}
+
+/// MessageImage - Image metadata for S3 tracking (GDPR compliant)
+model MessageImage {
+  id                String        @id @default(cuid())
+  messageId         String        @map("message_id")
+  storageKey        String        @map("storage_key")
+  originalFilename  String?       @map("original_filename")
+  fileSizeBytes     Int?          @map("file_size_bytes")
+  mimeType          String?       @map("mime_type")
+  width             Int?
+  height            Int?
+
+  // URLs
+  originalUrl       String?       @map("original_url")
+  thumbnailUrl      String?       @map("thumbnail_url")
+  previewUrl        String?       @map("preview_url")
+
+  // Auto-deletion (GDPR per NFR-MSG-SEC-006)
+  deleteAfter       DateTime      @default(now() + interval '90 days') @map("delete_after")
+
+  // Timestamps
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  message           MessageNew    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([deleteAfter])
+  @@map("message_images")
+}
+
+// Enums for Enhanced Messaging System
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+  AUTO_ARCHIVED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  SYSTEM
 }
 
 // ========================================
