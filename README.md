@@ -12,9 +12,9 @@ NomadShift is a dual-sided marketplace platform that connects temporary workers 
 
 ## Implementation Status
 
-**Current Version:** 1.4.0 (2026-02-06)
+**Current Version:** 1.5.0 (2026-02-06)
 **Project Phase:** IMPLEMENTING
-**Quality Status:** WARNING (87.4% TRUST score achieved)
+**Quality Status:** WARNING (CRITICAL: Test coverage 12.5% vs 85% target)
 
 ### SPEC Completion
 
@@ -25,11 +25,11 @@ NomadShift is a dual-sided marketplace platform that connects temporary workers 
 | SPEC-BIZ-001 | Business Profile Management | ✅ COMPLETE | 95% |
 | SPEC-REV-001 | Reviews and Ratings | ✅ COMPLETE | 84% |
 | SPEC-JOB-001 | Job Posting & Discovery System | ✅ COMPLETE | 95% |
+| SPEC-NOT-001 | Multi-Channel Notifications | ⚠️ WARNING | 91% |
 | SPEC-MSG-001 | Messaging System | 📋 Planned | 0% |
-| SPEC-NOT-001 | Notifications | 📋 Planned | 0% |
 | SPEC-SEARCH-001 | Job Discovery and Search | ✅ COMPLETE (merged into SPEC-JOB-001) | 100% |
 
-**Overall:** 5/8 SPECs completed (62.5%)
+**Overall:** 6/8 SPECs completed (75%)
 
 ### Quality Metrics
 
@@ -45,9 +45,25 @@ NomadShift is a dual-sided marketplace platform that connects temporary workers 
 ### Known Issues
 
 **Production Readiness Warning:**
+
+**SPEC-NOT-001 (Notifications - 91% complete) - CRITICAL ISSUES:**
+- **Test Coverage:** 12.5% coverage achieved (need 85%) - 🔴 CRITICAL (72.5% gap)
+- **No Rate Limiting:** REQ-NOT-014 not implemented - 🔴 CRITICAL (security risk)
+- **Critical Bug:** Duplicate `where` clause - 🔴 CRITICAL (compilation error)
+- **No HTML Sanitization:** XSS risk via templates - 🔴 HIGH
+- **SMS Not Implemented:** Service pending - ⚠️ MEDIUM
+- **Incomplete GDPR:** No anonymization/export/delete - ⚠️ MEDIUM
+
+**SPEC-JOB-001 (Jobs - 95% complete) - HIGH Priority Issues:**
 - **Test Coverage:** 70% coverage achieved (need 85%) - MEDIUM (15% gap)
 - **Performance:** Performance not validated with load tests - HIGH (search < 2s, map < 3s)
 - **Integration Tests:** No E2E tests implemented - HIGH
+
+**General Issues:**
+- **Type Safety:** TypeScript strict mode disabled, should enable
+- **File Validation:** Photo upload needs magic bytes validation (HIGH priority)
+- **Account Lockout:** Not implemented after failed login attempts (MEDIUM priority)
+- **Email Service:** Verification email sending not yet implemented (MEDIUM priority)
 
 **Existing Issues:**
 - **Type Safety:** TypeScript strict mode disabled, should enable
@@ -56,7 +72,7 @@ NomadShift is a dual-sided marketplace platform that connects temporary workers 
 - **Email Service:** Verification email sending not yet implemented (MEDIUM priority)
 - **AWS SDK v2:** Should migrate to AWS SDK v3 (MEDIUM priority)
 
-**Next Steps:** See [CHANGELOG.md](CHANGELOG.md#140---2026-02-06) for detailed release notes
+**Next Steps:** See [CHANGELOG.md](CHANGELOG.md#150---2026-02-06) for detailed release notes
 
 ## Tech Stack
 
@@ -284,8 +300,39 @@ http://localhost:3000/api/docs
 
 ### Notifications (`/api/v1/notifications`)
 
-- `GET /notifications` - Get my notifications
-- `PATCH /notifications/preferences` - Update notification preferences
+**Implemented (v1.5.0) - 27 Endpoints:**
+
+**Notification Management (9 endpoints):**
+- `GET /notifications` - Get my notifications (paginated, filtered)
+- `GET /notifications/:notificationId` - Get single notification
+- `PUT /notifications/:notificationId/read` - Mark as read
+- `PUT /notifications/read/all` - Mark all as read
+- `DELETE /notifications/:notificationId` - Delete notification
+- `POST /notifications/send` - Send notification (internal)
+- `GET /notifications/preferences` - Get preferences
+- `PATCH /notifications/preferences` - Update preferences
+
+**GDPR Compliance (2 public endpoints):**
+- `POST /notifications/unsubscribe/email` - Unsubscribe from email (public)
+- `POST /notifications/unsubscribe/sms` - Unsubscribe from SMS (public)
+
+**Template Management (5 admin endpoints):**
+- `GET /notifications/templates` - Get all templates
+- `POST /notifications/templates` - Create template
+- `PATCH /notifications/templates/:templateId` - Update template
+- `POST /notifications/templates/:templateId/rollback` - Rollback template
+- `POST /notifications/templates/test` - Test template rendering
+
+**Device Token Management (4 endpoints):**
+- `POST /notifications/device-tokens` - Register device token
+- `GET /notifications/device-tokens` - Get user tokens
+- `PATCH /notifications/device-tokens/:tokenId` - Update token
+- `DELETE /notifications/device-tokens/:tokenId` - Deactivate token
+
+**WebSocket Gateway:**
+- `WS /notifications` - Real-time notification delivery (Socket.IO)
+
+**Documentation:** See [docs/API_NOTIFICATIONS.md](docs/API_NOTIFICATIONS.md) for complete API documentation.
 
 ### Compliance (`/api/v1/compliance`)
 
