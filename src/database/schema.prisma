@@ -1,0 +1,320 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model with authentication fields
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  passwordHash String  // Password hashed with bcrypt
+  firstName   String?
+  lastName    String?
+  avatar      String?
+  preferredLanguage String @default("en") // en, es
+
+  // Verification fields
+  verifiedAt     DateTime?
+  verificationToken String? // UUID for email verification
+  verificationTokenExpiresAt DateTime?
+
+  // OAuth fields
+  oauthProvider String? // google, apple
+  oauthId       String? // Provider-specific user ID
+
+  // Role management
+  primaryRole   UserRole @default(NOMAD_WORKER)
+  isActive      Boolean  @default(true)
+
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  userRoles     UserRoleRelation[]
+  sessions      Session[]
+  passwordResetTokens PasswordResetToken[]
+  tosAcceptance TosAcceptance?
+  notifications Notification[]
+  notificationPreferences NotificationPreference?
+  deviceTokens  DeviceToken[]
+
+  @@map("users")
+}
+
+// User roles supporting multiple role system
+enum UserRole {
+  BUSINESS_OWNER
+  NOMAD_WORKER
+}
+
+// Junction table for many-to-many relationship between users and roles
+model UserRoleRelation {
+  id     String @id @default(cuid())
+  userId String
+  role   UserRole
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
+
+// Session management for JWT tokens
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// Password reset tokens
+model PasswordResetToken {
+  id     String   @id @default(cuid())
+  userId String
+  token  String   @unique
+  expiresAt DateTime
+  usedAt DateTime?
+
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+// Terms of Service acceptance tracking
+model TosAcceptance {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  version       String   // Version of ToS accepted
+  acceptedAt    DateTime @default(now())
+  ipAddress     String
+  userAgent     String
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tos_acceptance")
+}
+
+// Email service configuration placeholder for future implementation
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  subject     String
+  htmlContent String
+  textContent String?
+  variables   Json?    // Template variables mapping
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("email_templates")
+}
+
+// ============================================================================
+// SPEC-NOT-001: Multi-Channel Notification System
+// ============================================================================
+
+// Notification model for storing all notifications
+model Notification {
+  id                String              @id @default(cuid())
+  userId            String
+  type              NotificationType
+  payload           Json                // Notification data (flexible schema)
+
+  // Read status
+  isRead            Boolean             @default(false)
+  readAt            DateTime?
+
+  // Delivery status per channel
+  inAppStatus       DeliveryStatus      @default(PENDING)
+  inAppDeliveredAt  DateTime?
+  emailStatus       DeliveryStatus      @default(PENDING)
+  emailDeliveredAt  DateTime?
+  pushStatus        DeliveryStatus      @default(PENDING)
+  pushDeliveredAt   DateTime?
+  smsStatus         DeliveryStatus      @default(PENDING)
+  smsDeliveredAt    DateTime?
+
+  // Failure tracking
+  failureReason     String?
+  retryCount        Int                 @default(0)
+
+  // Job tracking for queue processing
+  jobId             String?             // Bull queue job ID
+
+  // Timestamps
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+  @@index([type])
+  @@map("notifications")
+}
+
+// Notification type enumeration
+enum NotificationType {
+  // Job application notifications
+  JOB_APPLICATION_RECEIVED
+  APPLICATION_STATUS_CHANGED
+  APPLICATION_WITHDRAWN
+
+  // Review notifications
+  REVIEW_RECEIVED
+  REVIEW_RESPONSE_RECEIVED
+  REVIEW_MODERATED
+
+  // Message notifications
+  NEW_MESSAGE
+  MESSAGE_DIGEST
+
+  // Job alert notifications
+  JOB_ALERT
+
+  // System notifications
+  JOB_EXPIRING_SOON
+  VERIFICATION_STATUS_CHANGED
+  SECURITY_ALERT
+  BADGE_EARNED
+}
+
+// Delivery status enumeration
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// User notification preferences
+model NotificationPreference {
+  id                String              @id @default(cuid())
+  userId            String              @unique
+
+  // Channel preferences (global enable/disable)
+  inAppEnabled      Boolean             @default(true)
+  emailEnabled      Boolean             @default(true)
+  pushEnabled       Boolean             @default(true)
+  smsEnabled        Boolean             @default(false) // Security events only
+
+  // Quiet hours for push notifications
+  quietHoursEnabled Boolean             @default(false)
+  quietHoursStart   String?             // Format: "HH:MM" (e.g., "22:00")
+  quietHoursEnd     String?             // Format: "HH:MM" (e.g., "08:00")
+  quietHoursTimezone String             @default("UTC")
+
+  // Email digest preference
+  emailDigest       EmailDigestFrequency @default(IMMEDIATE)
+
+  // Type-specific preferences (JSON for flexibility)
+  // Format: { "JOB_APPLICATION_RECEIVED": { "inApp": true, "email": true, "push": true }, ... }
+  typePreferences   Json?
+
+  // Unsubscribe tokens (GDPR)
+  emailUnsubscribeToken   String        @unique
+  smsUnsubscribeToken     String        @unique
+
+  // Timestamps
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// Email digest frequency enumeration
+enum EmailDigestFrequency {
+  IMMEDIATE
+  DAILY
+  WEEKLY
+  NONE
+}
+
+// Notification template model
+model NotificationTemplate {
+  id                String              @id @default(cuid())
+  key               String              @unique // e.g., "job_application_received_en"
+  type              NotificationType
+  language          String              @default("en") // en, es
+
+  // Channel templates
+  subject           String?             // Email subject
+  htmlBody          String?             // Email HTML body
+  textBody          String?             // Email plain text body
+  pushTitle         String?             // Push notification title
+  pushBody          String?             // Push notification body
+  smsTemplate       String?             // SMS template (max 160 chars)
+  inAppTemplate     String?             // In-app notification template
+
+  // Template variables documentation (JSON)
+  // Format: { "variables": ["userName", "jobTitle"], "example": { "userName": "John", "jobTitle": "Bartender" } }
+  variables         Json?
+
+  // Versioning
+  version           Int                 @default(1)
+  isActive          Boolean             @default(true)
+
+  // Timestamps
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([type, language, version])
+  @@index([type])
+  @@index([isActive])
+  @@map("notification_templates")
+}
+
+// ============================================================================
+// SPEC-NOT-001: Push Notification Device Tokens
+// ============================================================================
+
+// Device token model for push notifications
+model DeviceToken {
+  id          String          @id @default(cuid())
+  userId      String
+  platform    DevicePlatform  // ios, android
+  token       String          // FCM or APNs device token
+  isActive    Boolean         @default(true)
+
+  // Device metadata
+  deviceModel    String?     // e.g., "iPhone14,2", "Pixel 6"
+  osVersion      String?     // e.g., "iOS 16.0", "Android 13"
+  appVersion     String?     // e.g., "1.0.0"
+
+  // Timestamps
+  lastUsedAt     DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@index([platform])
+  @@index([isActive])
+  @@map("device_tokens")
+}
+
+// Device platform enumeration
+enum DevicePlatform {
+  IOS
+  ANDROID
+}

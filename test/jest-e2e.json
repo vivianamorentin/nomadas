@@ -1,0 +1,18 @@
+{
+  "preset": "ts-jest",
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "globals": {
+    "ts-jest": {
+      "useTsJest": true
+    }
+  },
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "collectCoverageFrom": [
+    "**/*.(t|j)s"
+  ],
+  "coverageDirectory": "../coverage",
+  "coverageReporters": ["text", "lcov", "html"]
+}
