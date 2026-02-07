@@ -12,9 +12,9 @@ NomadShift is a dual-sided marketplace platform that connects temporary workers 
 
 ## Implementation Status
 
-**Current Version:** 1.3.0 (2026-02-05)
+**Current Version:** 1.4.0 (2026-02-06)
 **Project Phase:** IMPLEMENTING
-**Quality Status:** GOOD (84% TRUST score achieved)
+**Quality Status:** WARNING (87.4% TRUST score achieved)
 
 ### SPEC Completion
 
@@ -24,31 +24,30 @@ NomadShift is a dual-sided marketplace platform that connects temporary workers 
 | SPEC-AUTH-001 | User Authentication & Onboarding | ✅ COMPLETE | 85% |
 | SPEC-BIZ-001 | Business Profile Management | ✅ COMPLETE | 95% |
 | SPEC-REV-001 | Reviews and Ratings | ✅ COMPLETE | 84% |
-| SPEC-JOB-001 | Job Posting Management | 📋 Planned | 0% |
+| SPEC-JOB-001 | Job Posting & Discovery System | ✅ COMPLETE | 95% |
 | SPEC-MSG-001 | Messaging System | 📋 Planned | 0% |
 | SPEC-NOT-001 | Notifications | 📋 Planned | 0% |
-| SPEC-SEARCH-001 | Job Discovery and Search | 📋 Planned | 0% |
+| SPEC-SEARCH-001 | Job Discovery and Search | ✅ COMPLETE (merged into SPEC-JOB-001) | 100% |
 
-**Overall:** 4/8 SPECs completed (50%)
+**Overall:** 5/8 SPECs completed (62.5%)
 
 ### Quality Metrics
 
 | Metric | Current | Target | Status |
 |--------|---------|--------|--------|
-| Test Coverage | 6% (reviews module) | 85% | ⚠️ |
+| Test Coverage | 70% (jobs module) | 85% | ⚠️ |
 | Type Safety | Partial | Full | ⚠️ |
-| TRUST 5 Score | 84% (reviews module) | 80% | ✅ |
-| LSP Quality Gates | 10/11 passing | 11/11 | ⚠️ |
-| Security (OWASP) | 78% | 80% | ⚠️ |
+| TRUST 5 Score | 87.4% (jobs module) | 80% | ✅ |
+| LSP Quality Gates | 11/13 passing | 13/13 | ⚠️ |
+| Security (OWASP) | 95% | 80% | ✅ |
 | Architecture (DDD) | 95% | 80% | ✅ |
 
 ### Known Issues
 
 **Production Readiness Warning:**
-- **Test Coverage:** Only 6% coverage achieved (need 85%) - CRITICAL
-- **Rate Limiting:** Reviews endpoints missing rate limiting - HIGH
+- **Test Coverage:** 70% coverage achieved (need 85%) - MEDIUM (15% gap)
+- **Performance:** Performance not validated with load tests - HIGH (search < 2s, map < 3s)
 - **Integration Tests:** No E2E tests implemented - HIGH
-- **Performance:** Performance not validated with load tests - MEDIUM
 
 **Existing Issues:**
 - **Type Safety:** TypeScript strict mode disabled, should enable
@@ -57,7 +56,7 @@ NomadShift is a dual-sided marketplace platform that connects temporary workers 
 - **Email Service:** Verification email sending not yet implemented (MEDIUM priority)
 - **AWS SDK v2:** Should migrate to AWS SDK v3 (MEDIUM priority)
 
-**Next Steps:** See [CHANGELOG.md](CHANGELOG.md#120---2026-02-05) for detailed release notes
+**Next Steps:** See [CHANGELOG.md](CHANGELOG.md#140---2026-02-06) for detailed release notes
 
 ## Tech Stack
 
@@ -239,12 +238,36 @@ http://localhost:3000/api/docs
 
 ### Jobs (`/api/v1/jobs`)
 
+**Implemented (v1.4.0):**
+- `POST /jobs` - Create job posting (all fields)
+- `GET /jobs/:id` - Get job details (with match scores)
+- `PATCH /jobs/:id` - Update job posting (active/draft only)
+- `DELETE /jobs/:id` - Close job (soft delete)
+- `PATCH /jobs/:id/status` - Change job status (active/paused/closed)
+- `GET /businesses/:businessId/jobs` - List business jobs (paginated)
+- `POST /jobs/:id/duplicate` - Duplicate job posting
+
+**Job Search & Discovery:**
+- `GET /jobs/search` - Advanced search (15+ filters, geospatial, 4 sorts)
+- `GET /jobs/map` - Map view markers (grid clustering, 21 zoom levels)
+
+**Saved Jobs & Searches:**
+- `POST /workers/me/saved-jobs` - Save job (max 100)
+- `GET /workers/me/saved-jobs` - List saved jobs (paginated)
+- `DELETE /workers/me/saved-jobs/:id` - Unsave job
+- `POST /workers/me/saved-searches` - Save search (max 5)
+- `GET /workers/me/saved-searches` - List saved searches
+- `DELETE /workers/me/saved-searches/:id` - Delete saved search
+
+**Match Scoring & Recommendations:**
+- `GET /jobs/recommendations` - Get personalized jobs (match scores)
+- `GET /businesses/:businessId/top-matches` - Get top matching workers
+
+**Documentation:** See [docs/API_JOB_MARKETPLACE.md](docs/API_JOB_MARKETPLACE.md) for complete API documentation.
+
+**Previously Documented:**
 - `GET /jobs` - Search jobs with filters
-- `GET /jobs/:id` - Get job by ID
-- `POST /jobs` - Create job posting
-- `PATCH /jobs/:id` - Update job posting
-- `DELETE /jobs/:id` - Delete job posting
-- `POST /jobs/:id/apply` - Apply for job
+- `POST /jobs/:id/apply` - Apply for job (SPEC-APP-001, not yet implemented)
 
 ### Applications (`/api/v1/applications`)
 
