@@ -42,6 +42,9 @@ model User {
   sessions      Session[]
   passwordResetTokens PasswordResetToken[]
   tosAcceptance TosAcceptance?
+  notifications Notification[]
+  notificationPreferences NotificationPreference?
+  deviceTokens  DeviceToken[]
 
   @@map("users")
 }
@@ -118,4 +121,200 @@ model EmailTemplate {
   updatedAt   DateTime @updatedAt
 
   @@map("email_templates")
+}
+
+// ============================================================================
+// SPEC-NOT-001: Multi-Channel Notification System
+// ============================================================================
+
+// Notification model for storing all notifications
+model Notification {
+  id                String              @id @default(cuid())
+  userId            String
+  type              NotificationType
+  payload           Json                // Notification data (flexible schema)
+
+  // Read status
+  isRead            Boolean             @default(false)
+  readAt            DateTime?
+
+  // Delivery status per channel
+  inAppStatus       DeliveryStatus      @default(PENDING)
+  inAppDeliveredAt  DateTime?
+  emailStatus       DeliveryStatus      @default(PENDING)
+  emailDeliveredAt  DateTime?
+  pushStatus        DeliveryStatus      @default(PENDING)
+  pushDeliveredAt   DateTime?
+  smsStatus         DeliveryStatus      @default(PENDING)
+  smsDeliveredAt    DateTime?
+
+  // Failure tracking
+  failureReason     String?
+  retryCount        Int                 @default(0)
+
+  // Job tracking for queue processing
+  jobId             String?             // Bull queue job ID
+
+  // Timestamps
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+  @@index([type])
+  @@map("notifications")
+}
+
+// Notification type enumeration
+enum NotificationType {
+  // Job application notifications
+  JOB_APPLICATION_RECEIVED
+  APPLICATION_STATUS_CHANGED
+  APPLICATION_WITHDRAWN
+
+  // Review notifications
+  REVIEW_RECEIVED
+  REVIEW_RESPONSE_RECEIVED
+  REVIEW_MODERATED
+
+  // Message notifications
+  NEW_MESSAGE
+  MESSAGE_DIGEST
+
+  // Job alert notifications
+  JOB_ALERT
+
+  // System notifications
+  JOB_EXPIRING_SOON
+  VERIFICATION_STATUS_CHANGED
+  SECURITY_ALERT
+  BADGE_EARNED
+}
+
+// Delivery status enumeration
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// User notification preferences
+model NotificationPreference {
+  id                String              @id @default(cuid())
+  userId            String              @unique
+
+  // Channel preferences (global enable/disable)
+  inAppEnabled      Boolean             @default(true)
+  emailEnabled      Boolean             @default(true)
+  pushEnabled       Boolean             @default(true)
+  smsEnabled        Boolean             @default(false) // Security events only
+
+  // Quiet hours for push notifications
+  quietHoursEnabled Boolean             @default(false)
+  quietHoursStart   String?             // Format: "HH:MM" (e.g., "22:00")
+  quietHoursEnd     String?             // Format: "HH:MM" (e.g., "08:00")
+  quietHoursTimezone String             @default("UTC")
+
+  // Email digest preference
+  emailDigest       EmailDigestFrequency @default(IMMEDIATE)
+
+  // Type-specific preferences (JSON for flexibility)
+  // Format: { "JOB_APPLICATION_RECEIVED": { "inApp": true, "email": true, "push": true }, ... }
+  typePreferences   Json?
+
+  // Unsubscribe tokens (GDPR)
+  emailUnsubscribeToken   String        @unique
+  smsUnsubscribeToken     String        @unique
+
+  // Timestamps
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// Email digest frequency enumeration
+enum EmailDigestFrequency {
+  IMMEDIATE
+  DAILY
+  WEEKLY
+  NONE
+}
+
+// Notification template model
+model NotificationTemplate {
+  id                String              @id @default(cuid())
+  key               String              @unique // e.g., "job_application_received_en"
+  type              NotificationType
+  language          String              @default("en") // en, es
+
+  // Channel templates
+  subject           String?             // Email subject
+  htmlBody          String?             // Email HTML body
+  textBody          String?             // Email plain text body
+  pushTitle         String?             // Push notification title
+  pushBody          String?             // Push notification body
+  smsTemplate       String?             // SMS template (max 160 chars)
+  inAppTemplate     String?             // In-app notification template
+
+  // Template variables documentation (JSON)
+  // Format: { "variables": ["userName", "jobTitle"], "example": { "userName": "John", "jobTitle": "Bartender" } }
+  variables         Json?
+
+  // Versioning
+  version           Int                 @default(1)
+  isActive          Boolean             @default(true)
+
+  // Timestamps
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([type, language, version])
+  @@index([type])
+  @@index([isActive])
+  @@map("notification_templates")
+}
+
+// ============================================================================
+// SPEC-NOT-001: Push Notification Device Tokens
+// ============================================================================
+
+// Device token model for push notifications
+model DeviceToken {
+  id          String          @id @default(cuid())
+  userId      String
+  platform    DevicePlatform  // ios, android
+  token       String          // FCM or APNs device token
+  isActive    Boolean         @default(true)
+
+  // Device metadata
+  deviceModel    String?     // e.g., "iPhone14,2", "Pixel 6"
+  osVersion      String?     // e.g., "iOS 16.0", "Android 13"
+  appVersion     String?     // e.g., "1.0.0"
+
+  // Timestamps
+  lastUsedAt     DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@index([platform])
+  @@index([isActive])
+  @@map("device_tokens")
+}
+
+// Device platform enumeration
+enum DevicePlatform {
+  IOS
+  ANDROID
 }

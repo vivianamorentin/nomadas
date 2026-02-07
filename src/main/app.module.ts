@@ -5,6 +5,8 @@ import { PassportModule } from '@nestjs/passport';
 import { PrismaService } from '../database/prisma.service';
 import { IdentityModule } from './identity/identity.module';
 import { BusinessModule } from './business/business.module';
+import { JobsModule } from './jobs/jobs.module';
+import { NotificationModule } from './notifications/notification.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { BusinessModule } from './business/business.module';
     }),
     IdentityModule,
     BusinessModule,
+    JobsModule,
+    NotificationModule,
   ],
   providers: [PrismaService],
 })
